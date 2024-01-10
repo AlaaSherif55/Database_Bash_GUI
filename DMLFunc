@@ -348,6 +348,7 @@ while true; do
                 done
 
                 # Read the data from the file and construct the data string
+                column_data=""
                 while IFS="$delimiter" read -ra columns; do
                     for col in "${columns[@]}"; do
                         column_data+=" $col"
@@ -358,43 +359,10 @@ while true; do
                 zenity --width=600 --height=600 --list --text="Table data" --title="$2" $column_options $column_data
                 ;;
             "Select column(s) from Table")
-                # input=$(zenity --width=300 --height=300 --entry --title="Enter Columns" --text="Enter the column(s) separated by spaces")
-                # declare -a selectedcols=($input)
-                # validcols="0"
-
-                # for col in ${selectedcols[@]}; do
-                #     check_column_exist $col
-                #     validcols=$?
-                #     if [[ $validcols == "0" ]]; then
-                #         break
-                #     fi
-                # done
-
-                # if [[ $validcols == "1" ]]; then
-                #     # declare -a colnums=$(get_col_numbers ${selectedcols[@]})
-                #     # zenity --width=300 --height=300 --info --title="Selected Columns from Table" --text="$(awk -F: -v plainnums="${colnums[@]}" 'BEGIN{split(plainnums, numMap, "\n"); }\
-                #     #     {\
-                #     #     ptr=1; \
-                #     #     printf NR"-";\
-                #     #      for (i=1;i<=NF;i++) {\
-                #     #         if (i == (numMap[ptr]+1) ){\
-                #     #             printf " "$i;\
-                #     #             ptr++;\
-                #     #         }\
-                #     #      };\
-                #     #      print "";}' $tablefile)"
-                #     #  if [ $? -ne 0 ]; then
-                #     #  select_from_table
-                #     #  fi
-                #     ##################3
-                    
-                #     ########################
-                # else
-                #     zenity --width=300 --height=150 --error --text="Invalid columns.❌"
-                # fi
                 input=$(zenity --width=300 --height=300 --entry --title="Enter Columns" --text="Enter the column(s) separated by spaces")
                 declare -a selectedcols=($input)
                 validcols="0"
+
                 for col in "${selectedcols[@]}"; do
                     check_column_exist "$col"
                     validcols=$?
@@ -404,67 +372,87 @@ while true; do
                 done
 
                 if [[ $validcols == "1" ]]; then
-
                     delimiter=":"
 
                     # Generate --column options dynamically using the column names
                     column_options=""
-                    for col_name in $column_names; do
+                    for col_name in "${selectedcols[@]}"; do
                         column_options+=" --column=$col_name"
                     done
 
                     # Get the selected column numbers
                     declare -a colnums=$(get_col_numbers "${selectedcols[@]}")
 
-
-
                     # Use awk to extract and format the selected columns
                     formatted_cols=$(awk -F"$delimiter" -v plainnums="${colnums[*]}" '
-                        BEGIN{split(plainnums, numMap, "\n");}\
-                        {\
-                        for (i=1;i<=length(numMap);i++) {
-                          asscValues[i] = $(numMap[i]+1);
+                        BEGIN {
+                            split(plainnums, numMap, "\n");
                         }
+                        {
+                            ptr = 1;
+                            for (i = 1; i <= NF; i++) {
+                                if (i == (numMap[ptr] + 1)) {
+                                    printf "%s ", $i;
+                                    ptr++;
+                                }
+                            }
+                            print "";
+                        }' "$tablefile")
 
-                        ptr=1; \
-                        for (i=1;i<=length(asscValues);i++) {
-                          if (asscValues[i] != "") {
-                            printf asscValues[i]" ";
-                          }
-
-                        }
-                         print "";}' $tablefile)
-
-                    # Display the formatted columns using zenity
-                    zenity --width=300 --height=300 --info --title="Selected Columns from Table" --text="$formatted_cols" $column_options
+                    # Display the formatted columns using zenity --list
+                    zenity --width=600 --height=600 --list --text="Table data" --title="$2" $column_options $formatted_cols
                 else
                     zenity --width=300 --height=150 --error --text="Invalid columns.❌"
                 fi
                 ;;
             "Select data matching condition(s)")
-                selectinput=$(zenity --width=300 --height=300 --entry --title="Enter Conditions" --text="Enter the conditions separated by comma (,)")
-                
-                echo $selectinput
-                selectinput=$(echo -e "${selectinput}" | tr -d '[:space:]')
+                delimiter=":"
+                column_names=$(cut -d"$delimiter" -f1 "$metadatafile" | tr '\n' ' ')
 
+
+                column_options=""
+                for col_name in $column_names; do
+                    column_options+=" --column=$col_name"
+                done
+
+                selectinput=$(zenity --width=300 --height=300 --entry --title="Enter Conditions" --text="Enter the conditions separated by comma (,)")
+                echo "Conditions entered: $selectinput"
+                selectinput=$(echo -e "${selectinput}" | tr -d '[:space:]')
+                
                 IFS=","
                 declare -a conditions=($selectinput)
                 IFS=$OIFS
-                echo $conditions
+
                 valid_select_statements "${conditions[@]}"
                 validselect=$?
+                echo "Valid select: $validselect"
 
                 if [[ $validselect == "1" ]]; then
-                  validrows=$(get_matching_rows "${conditions[@]}")
-                   zenity --width=300 --height=300 --info --title="Selected Data Matching Conditions" --text="$(awk -F: -v validrowsraw="$validrows" 'BEGIN{split(validrowsraw,validrows," ");ctr=1;}\
-                   {\
-                  if (NR == validrows[ctr]){\
-                   for (i=1;i<=NF;i++) {\
-                         printf $i" "
-                         }\
-                         print ""
-                            }\
-                                 }' $tablefile)"
+                    validrows=$(get_matching_rows "${conditions[@]}")
+                    validrowsdata="$(awk -F: -v validrowsraw="$validrows" 'BEGIN{split(validrowsraw,validrows," ");ctr=1;}\
+                        {\
+                        if (NR == validrows[ctr]){\
+                        for (i=1;i<=NF;i++) {\
+                                printf $i" "
+                                }\
+                                print "" 
+                                ctr++  }\
+                                        }' $tablefile)" 
+                    
+                    readarray -t rows <<< "$validrowsdata"
+                    data_list=""
+                    delimiter=":"
+                    for row in "${rows[@]}"; do
+
+                        columns=($(echo $row | tr $delimiter " "))
+                        row_data=""
+                        for col in "${columns[@]}"; do
+                            row_data+="$col "
+                        done
+                        data_list+="$row_data"
+                    done
+
+                    zenity --width=600 --height=600 --list --text="Selected Data Matching Conditions" $column_options $data_list
                 else
                     zenity --width=300 --height=150 --error --text="Invalid select statements.❌"
                 fi
