@@ -92,36 +92,51 @@ create_table() {
 list_tables() {
     DBName="$1"
     zenity --width=600 --height=600 --list --title="List Tables" --column="Tables" $(ls Database/$DBName | grep -v "_metaData")
-   if [ $? -ne 0 ]; then
+    if [ $? -eq 0 ]; then
         menu
-   fi
-
+    else
+        menu
+    fi
+ 
 }
 
 drop_table() {
     DBName="$1"
-    tables=$(ls Database/$DBName | grep -v "_metaData")
-    TableName=$(zenity --width=300 --height=300 --entry --title="Drop Table" --text="Enter the name of the table:")
-if [ $? -eq 0 ]; then
-    for file in $tables; do
-        if [ "$TableName" == "$file" ]; then
-            rm Database/$DBName/$TableName
-            rm "Database/$DBName/${TableName}_metaData"
-            zenity --width=300 --height=150 --info --title="Table Dropped" --text="Table $TableName dropped successfully in $DBName database."
-            break
-        else
-            zenity --width=300 --height=150 --error --title="Table Not Found" --text="Table $TableName does not exist."
-            break
-        fi
+    ##tables=$(ls Database/$DBName | grep -v "_metaData")
+    ##
+    Tables2=($(ls "Database/$DBName" | grep -v "_metaData"))
+    optionsTables3=()
+    for ((l = 0; l < ${#Tables2[@]}; l++)); do
+        optionsTables3+=("${Tables2[$l]}")
     done
-else
-    menu
-fi 
+   
+    TableName3=$(zenity --width=300 --height=300 --list --title="Select Tables in ${DBName}" --column="Tables" "${optionsTables3[@]}" \
+                        --text="Select Table in ${DBName}")
+    ##
+    ##TableName=$(zenity --width=300 --height=300 --entry --title="Drop Table" --text="Enter the name of the table:")
+    if [ $? -eq 0 ]; then
+        if [ -n "$TableName3" ]; then 
+            for file in $TableName3; do
+                if [ "$TableName3" == "$file" ]; then
+                    rm Database/$DBName/$TableName3
+                    rm "Database/$DBName/${TableName3}_metaData"
+                    zenity --width=300 --height=150 --info --title="Table Dropped" --text="Table $TableName3 dropped successfully in $DBName database."
+                    break
+                else
+                    zenity --width=300 --height=150 --error --title="Table Not Found" --text="Table $TableName3 does not exist."
+                    break
+                fi
+            done
+        else 
+            zenity --width=300 --height=150 --error --title="Error" --text="You did not select table.❌"
+        fi
+    else
+        menu
+    fi 
 }
 
 select_table() {
     DBName=$1
-    echo $DBName
     Tables2=($(ls "Database/$DBName" | grep -v "_metaData"))
     optionsTables=()
     for ((l = 0; l < ${#Tables2[@]}; l++)); do
@@ -167,7 +182,7 @@ select_table() {
                             zenity --width=300 --height=150 --error --title="Invalid Choice" --text="$REPLY is not one of the choices."
                     esac
                     else
-                        select_table $DBName
+                        break #select_table $DBName
                     fi
                     if [[ $disconnecttable == "true" ]]; then
                         break

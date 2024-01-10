@@ -28,15 +28,24 @@ createDB() {
 }
 
 listDB() {
-    files=$(ls Database)
-    list_text=""
-    for file in $files; do
-        if [[ -d Database/$file ]]; then
-            list_text="$list_text\n$file"
-        fi
+    # files=$(ls Database)
+    # list_text=""
+    # for file in $files; do
+    #     if [[ -d Database/$file ]]; then
+    #         list_text="$list_text\n$file"
+    #     fi
+    # done
+
+    # zenity --width=300 --height=300 --list --title="List Databases" --text="All Databases" --column="\n$list_text"
+
+    databases=($(ls Database))
+    optionsDropDatabase=()
+    for ((l = 0; l < ${#databases[@]}; l++)); do
+         optionsDropDatabase+=("${databases[$l]}")
     done
 
-    zenity --width=300 --height=300 --info --title="List Databases" --text="Databases:\n$list_text"
+  zenity --width=300 --height=300 --list --title="List Databases" --column="Databases" "${optionsDropDatabase[@]}" \
+    --text="All Databases"
 }
 
 connectDB() {

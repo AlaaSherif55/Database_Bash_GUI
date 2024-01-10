@@ -194,17 +194,18 @@ get_matching_rows() {
 update_table() {
     OIFS=$IFS
     selecteddb=$1
+    s2=$2
     tablefile=$selecteddb/$2
     metadatafile=$1/$2"_metaData"
     metadataraw=$(cat $metadatafile)
     dataraw=$(cat $tablefile)
     
     # Use Zenity for displaying existing columns
-    existing_columns=""
-    for i in ${metadataraw[@]}; do
-        existing_columns+="$(echo $i | awk -F: '{print $1"("$2")";}')\n"
-    done
-        zenity --width=300 --height=300 --info --title="Existing Columns" --text="Columns:\n$existing_columns"
+    # existing_columns=""
+    # for i in ${metadataraw[@]}; do
+    #     existing_columns+="$(echo $i | awk -F: '{print $1"("$2")";}')\n"
+    # done
+    #     zenity --width=300 --height=300 --info --title="Existing Columns" --text="Columns:\n$existing_columns"
 
     # Prompt for condition
     condition=$(zenity --width=600 --height=600 --entry --title="Enter Condition" --text="Please enter the condition (e.g., id=5)📝")
@@ -218,67 +219,73 @@ update_table() {
     validcond=$?
     
     if (( ${#conditionElements[@]} != 2 || $validcond != "1" )); then
-        zenity --width=300 --height=150  --error --text="Invalid condition."
+        #zenity --width=300 --height=150  --error --text="Invalid condition."
+        #menu2
         return
     fi
 
     # Prompt for columns to change
-    updateinput=$(zenity --width=600 --height=600 --entry --title="Enter Updates" --text="Enter the columns you wish to change separated by commas and their new values (e.g., col=newValue, col2=newValue2...)")
-    updateinput=$(echo -e "${updateinput}" | tr -d '[:space:]')
+    updateinput=$(zenity --width=300 --height=600 --entry --title="Enter Updates" --text="Enter the columns you wish (e.g., col=newValue, col2=newValue2...)")
+    if [ $? -eq 0 ]; then
+        updateinput=$(echo -e "${updateinput}" | tr -d '[:space:]')
+    
+        IFS=","
+        declare -a updates=($updateinput)
+        IFS=$OIFS
+        valid_statements ${updates[@]}
+        validupdate=$?
+        IFS=$OIFS
 
-    IFS=","
-    declare -a updates=($updateinput)
-    IFS=$OIFS
-    valid_statements ${updates[@]}
-    validupdate=$?
-    IFS=$OIFS
+        if [[ $validupdate == "1" ]]; then
+            zenity --width=300 --height=150 --info --text="Update is valid"
+            declare -a numbermappingraw=$(get_col_numbers ${updates[@]})
+            declare -a valuemappingraw=$(get_update_values ${updates[@]})
+            numbermapping=$numbermappingraw
+            valuemapping=$valuemappingraw
+            condfield=$(get_cond_number $condition)
+            condvalue=$(get_cond_value $condition)
 
-    if [[ $validupdate == "1" ]]; then
-        zenity --width=300 --height=150 --info --text="Update is valid"
-        declare -a numbermappingraw=$(get_col_numbers ${updates[@]})
-        declare -a valuemappingraw=$(get_update_values ${updates[@]})
-        numbermapping=$numbermappingraw
-        valuemapping=$valuemappingraw
-        condfield=$(get_cond_number $condition)
-        condvalue=$(get_cond_value $condition)
-
-        awk -F: -v numberplain="$numbermapping" -v condnum="$condfield" -v valueplain="$valuemapping" -v condval="$condvalue" \
-            'BEGIN{\
-                split(numberplain,numMap,"\n");\
-                split(valueplain,valMap,"\n");\
-                for (i in numMap) ++numMap[i];\
-                ++condnum;\
-                for (i in numMap) {\
-                    numValue[numMap[i]]=valMap[i];
-                }\
-            }\
-            {\
-                row="";\
-                for (i=1;i<=NF;i++) {\
-                    if ( numValue[i] == "" ) {\
-                        numValue[i] = "-";
+            awk -F: -v numberplain="$numbermapping" -v condnum="$condfield" -v valueplain="$valuemapping" -v condval="$condvalue" \
+                'BEGIN{\
+                    split(numberplain,numMap,"\n");\
+                    split(valueplain,valMap,"\n");\
+                    for (i in numMap) ++numMap[i];\
+                    ++condnum;\
+                    for (i in numMap) {\
+                        numValue[numMap[i]]=valMap[i];
                     }\
                 }\
-                if($condnum == condval){\
-                    for(i=1;i<=NF;i++){\
-                        if(numValue[i] != "-"){\
-                            if(row == "") {row=numValue[i];}\
-                            else{row=row":"numValue[i];}\
+                {\
+                    row="";\
+                    for (i=1;i<=NF;i++) {\
+                        if ( numValue[i] == "" ) {\
+                            numValue[i] = "-";
                         }\
-                        else {\
-                            if(row == "") {row=$i;}\
-                            else{row=row":"$i;}\
-                        }\
+                    }\
+                    if($condnum == condval){\
+                        for(i=1;i<=NF;i++){\
+                            if(numValue[i] != "-"){\
+                                if(row == "") {row=numValue[i];}\
+                                else{row=row":"numValue[i];}\
+                            }\
+                            else {\
+                                if(row == "") {row=$i;}\
+                                else{row=row":"$i;}\
+                            }\
+                        } \
+                        print row;
                     } \
-                    print row;
-                } \
-                else {\
-                    print $0;\
-                }
-            }' $tablefile > $tablefile".tmp"
-        mv $tablefile".tmp" $tablefile
+                    else {\
+                        print $0;\
+                    }
+                }' $tablefile > $tablefile".tmp"
+            mv $tablefile".tmp" $tablefile
+            menu2
+        else
+            zenity --width=300 --height=150 --error --text="Update is not valid ❌"
+        fi
     else
-        zenity --width=300 --height=150 --error --text="Update is not valid ❌"
+        menu2 #update_table $selecteddb $s2
     fi
 }
 
@@ -299,15 +306,67 @@ while true; do
        
         case $option in
             "Select ALL from Table")
-                zenity --width=300 --height=300 --info --title="List Databases" --text="$(awk -F: '{printf NR"-"; for (i=1;i<=NF;i++) {printf " "$i;}; print "";}' $tablefile)"
+                delimiter=":"
+
+                # Get the column names from the first field of metadatafile
+                column_names=$(cut -d"$delimiter" -f1 "$metadatafile" | tr '\n' ' ')
+
+                # Generate --column options dynamically using the column names
+                column_options=""
+                for col_name in $column_names; do
+                    column_options+=" --column=$col_name"
+                done
+
+                # Read the data from the file and construct the data string
+                while IFS="$delimiter" read -ra columns; do
+                    for col in "${columns[@]}"; do
+                        column_data+=" $col"
+                    done
+                done < "$tablefile"
+
+                # Use zenity with dynamically generated column options
+                zenity --width=600 --height=600 --list --text="Table data" --title="$2" $column_options $column_data
                 ;;
             "Select column(s) from Table")
+                # input=$(zenity --width=300 --height=300 --entry --title="Enter Columns" --text="Enter the column(s) separated by spaces")
+                # declare -a selectedcols=($input)
+                # validcols="0"
+
+                # for col in ${selectedcols[@]}; do
+                #     check_column_exist $col
+                #     validcols=$?
+                #     if [[ $validcols == "0" ]]; then
+                #         break
+                #     fi
+                # done
+
+                # if [[ $validcols == "1" ]]; then
+                #     # declare -a colnums=$(get_col_numbers ${selectedcols[@]})
+                #     # zenity --width=300 --height=300 --info --title="Selected Columns from Table" --text="$(awk -F: -v plainnums="${colnums[@]}" 'BEGIN{split(plainnums, numMap, "\n"); }\
+                #     #     {\
+                #     #     ptr=1; \
+                #     #     printf NR"-";\
+                #     #      for (i=1;i<=NF;i++) {\
+                #     #         if (i == (numMap[ptr]+1) ){\
+                #     #             printf " "$i;\
+                #     #             ptr++;\
+                #     #         }\
+                #     #      };\
+                #     #      print "";}' $tablefile)"
+                #     #  if [ $? -ne 0 ]; then
+                #     #  select_from_table
+                #     #  fi
+                #     ##################3
+                    
+                #     ########################
+                # else
+                #     zenity --width=300 --height=150 --error --text="Invalid columns.❌"
+                # fi
                 input=$(zenity --width=300 --height=300 --entry --title="Enter Columns" --text="Enter the column(s) separated by spaces")
                 declare -a selectedcols=($input)
                 validcols="0"
-
-                for col in ${selectedcols[@]}; do
-                    check_column_exist $col
+                for col in "${selectedcols[@]}"; do
+                    check_column_exist "$col"
                     validcols=$?
                     if [[ $validcols == "0" ]]; then
                         break
@@ -315,21 +374,38 @@ while true; do
                 done
 
                 if [[ $validcols == "1" ]]; then
-                    declare -a colnums=$(get_col_numbers ${selectedcols[@]})
-                    zenity --width=300 --height=300 --info --title="Selected Columns from Table" --text="$(awk -F: -v plainnums="${colnums[@]}" 'BEGIN{split(plainnums, numMap, "\n"); }\
-                        {\
-                        ptr=1; \
-                        printf NR"-";\
-                         for (i=1;i<=NF;i++) {\
-                            if (i == (numMap[ptr]+1) ){\
-                                printf " "$i;\
-                                ptr++;\
-                            }\
-                         };\
-                         print "";}' $tablefile)"
-                    #  if [ $? -ne 0 ]; then
-                    #  select_from_table
-                    #  fi
+                    delimiter=":"
+
+                    # Generate --column options dynamically using the column names
+                    column_options=""
+                    for col_name in $column_names; do
+                        column_options+=" --column=$col_name"
+                    done
+
+                    # Get the selected column numbers
+                    declare -a colnums=$(get_col_numbers "${selectedcols[@]}")
+
+
+
+                    # Use awk to extract and format the selected columns
+                    formatted_cols=$(awk -F"$delimiter" -v plainnums="${colnums[*]}" '
+                        BEGIN {
+                            split(plainnums, numMap, "\n");
+                        }
+                        {
+                            ptr = 1;
+                            printf NR "-";
+                            for (i = 1; i <= NF; i++) {
+                                if (i == (numMap[ptr] + 1)) {
+                                    printf " " $i;
+                                    ptr++;
+                                }
+                            };
+                            print "";
+                        }' "$tablefile")
+
+                    # Display the formatted columns using zenity
+                    zenity --width=300 --height=300 --info --title="Selected Columns from Table" --text="$formatted_cols" $column_options
                 else
                     zenity --width=300 --height=150 --error --text="Invalid columns.❌"
                 fi
@@ -473,31 +549,38 @@ deleteTable() {
 
                     conditions=$(zenity --width=300 --height=300 --entry --title="Enter Condition" \
                         --text="Enter the condition to delete (columnName specificValue): ")
+                    if [ $? -eq 0 ]; then 
+                        if [ -n "$conditions" ]; then  
+                            IFS=" " read -r columnName value <<< "$conditions"
+                            echo $columnName
+                            echo $value
+                            if [[ $value == *" "* ]]; then
+                                flagNumOfArg=1
+                                continue
+                            fi
+                            FieldNum=$(return_num_of_Field "$columnName" "$DBNameD" "$TableNameD")
 
-                    IFS=" " read -r columnName value <<< "$conditions"
-                    echo $columnName
-                    echo $value
-                    if [[ $value == *" "* ]]; then
-                        flagNumOfArg=1
-                        continue
-                    fi
-                    FieldNum=$(return_num_of_Field "$columnName" "$DBNameD" "$TableNameD")
+                            Name1=($(awk -F: '{print $1}' "Database/$DBNameD/${TableNameD}_metaData"))
+                            for ((l = 0; l < ${#Name1[@]}; l++)); do
+                                if [[ $columnName == ${Name1[$l]} ]]; then
+                                    flagExist=1
+                                    break
+                                fi
+                            done
 
-                    Name1=($(awk -F: '{print $1}' "Database/$DBNameD/${TableNameD}_metaData"))
-                    for ((l = 0; l < ${#Name1[@]}; l++)); do
-                        if [[ $columnName == ${Name1[$l]} ]]; then
-                            flagExist=1
-                            break
+                            if [[ "$flagExist" == 1 ]]; then
+                                awk -F: -v fNum="$FieldNum" -v valuetest="$value" '{if($fNum == valuetest){next;} {print} }' \
+                                    "Database/$DBNameD/$TableNameD" >"Database/$DBNameD/${TableNameD}_temp"
+                                mv "Database/$DBNameD/${TableNameD}_temp" "Database/$DBNameD/$TableNameD"
+                                zenity --width=300 --height=150 --info --text="Deleted successfully!✅"
+                            else
+                                flagDisplayErrorMessage=1
+                            fi
+                        else 
+                            zenity --width=300 --height=150 --error --title="Error" --text="You did not write condition.❌"
                         fi
-                    done
-
-                    if [[ "$flagExist" == 1 ]]; then
-                        awk -F: -v fNum="$FieldNum" -v valuetest="$value" '{if($fNum == valuetest){next;} {print} }' \
-                            "Database/$DBNameD/$TableNameD" >"Database/$DBNameD/${TableNameD}_temp"
-                        mv "Database/$DBNameD/${TableNameD}_temp" "Database/$DBNameD/$TableNameD"
-                        zenity --width=300 --height=150 --info --text="Deleted successfully!✅"
                     else
-                        flagDisplayErrorMessage=1
+                        break
                     fi
                 done
                 ;;
@@ -512,50 +595,57 @@ deleteTable() {
                     fi
 
                     columnName=$(zenity --width=300 --height=300 --entry --title="Enter Column Name" --text="Enter the name of column you want to delete:")
+                    if [ $? -eq 0 ]; then 
+                        if [ -n "$conditions" ]; then 
+                            FieldNum=$(return_num_of_Field "$columnName" "$DBNameD" "$TableNameD")
+                            PK2=($(awk -F: '{print ($3 == "" ? "x" : $3)}' "Database/$DBNameD/${TableNameD}_metaData"))
+                            allowDeleteOrNOt=${PK2[$((FieldNum - 1))]}
+                            Name1=($(awk -F: '{print $1}' "Database/$DBNameD/${TableNameD}_metaData"))
 
-                    FieldNum=$(return_num_of_Field "$columnName" "$DBNameD" "$TableNameD")
-                    PK2=($(awk -F: '{print ($3 == "" ? "x" : $3)}' "Database/$DBNameD/${TableNameD}_metaData"))
-                    allowDeleteOrNOt=${PK2[$((FieldNum - 1))]}
-                    Name1=($(awk -F: '{print $1}' "Database/$DBNameD/${TableNameD}_metaData"))
+                            for ((l = 0; l < ${#Name1[@]}; l++)); do
+                                if [[ $columnName == ${Name1[$l]} ]]; then
+                                    flagExist2=1
+                                fi
+                            done
 
-                    for ((l = 0; l < ${#Name1[@]}; l++)); do
-                        if [[ $columnName == ${Name1[$l]} ]]; then
-                            flagExist2=1
+                            if [[ "$flagExist2" == 1 && "$allowDeleteOrNOt" == "x" ]]; then
+                                awk -F: -v fNum="$FieldNum" '{
+                                    for (v = 1; v <= NF; v++) {
+                                        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $v);
+                                        if (fNum == v) {
+                                            $v = "";
+                                        }
+                                        if (v == NF && fNum != v) {
+                                            printf "%s", $v;
+                                            gsub(/[[:space:]]/, "", $v);
+                                        } else if (v != NF && fNum != v) {
+                                            printf "%s:", $v;
+                                        } else {
+                                            printf "%s", $v;
+                                        }
+                                    }
+                                    printf "\n";
+                                }' "Database/$DBNameD/$TableNameD" >"Database/$DBNameD/${TableNameD}_temp"
+
+                                mv "Database/$DBNameD/${TableNameD}_temp" "Database/$DBNameD/$TableNameD"
+                                # delete from table_metaData
+                                awk -F: -v numRow="$FieldNum" 'NR != numRow' "Database/$DBNameD/${TableNameD}_metaData" \
+                                    >"Database/$DBNameD/${TableNameD}_temp"
+                                mv "Database/$DBNameD/${TableNameD}_temp" "Database/$DBNameD/${TableNameD}_metaData"
+                                zenity --width=300 --height=150 --info --text="Deleted successfully!"
+                            elif [[ "$allowDeleteOrNOt" == "pk" ]]; then
+                                zenity --width=300 --height=150 --error --text="Can't remove this column as it is a Primary Key.🙅"
+                                flagExist2=0
+                                flagDisplayErrorMessage2=0
+                            else
+                                flagExist2=0
+                                flagDisplayErrorMessage2=1
+                            fi
+                        else 
+                            zenity --width=300 --height=150 --error --title="Error" --text="You did not write condition.❌"
                         fi
-                    done
-
-                    if [[ "$flagExist2" == 1 && "$allowDeleteOrNOt" == "x" ]]; then
-                        awk -F: -v fNum="$FieldNum" '{
-                            for (v = 1; v <= NF; v++) {
-                                gsub(/^[[:space:]]+|[[:space:]]+$/, "", $v);
-                                if (fNum == v) {
-                                    $v = "";
-                                }
-                                if (v == NF && fNum != v) {
-                                    printf "%s", $v;
-                                    gsub(/[[:space:]]/, "", $v);
-                                } else if (v != NF && fNum != v) {
-                                    printf "%s:", $v;
-                                } else {
-                                    printf "%s", $v;
-                                }
-                            }
-                            printf "\n";
-                        }' "Database/$DBNameD/$TableNameD" >"Database/$DBNameD/${TableNameD}_temp"
-
-                        mv "Database/$DBNameD/${TableNameD}_temp" "Database/$DBNameD/$TableNameD"
-                        # delete from table_metaData
-                        awk -F: -v numRow="$FieldNum" 'NR != numRow' "Database/$DBNameD/${TableNameD}_metaData" \
-                            >"Database/$DBNameD/${TableNameD}_temp"
-                        mv "Database/$DBNameD/${TableNameD}_temp" "Database/$DBNameD/${TableNameD}_metaData"
-                        zenity --width=300 --height=150 --info --text="Deleted successfully!"
-                    elif [[ "$allowDeleteOrNOt" == "pk" ]]; then
-                        zenity --width=300 --height=150 --error --text="Can't remove this column as it is a Primary Key.🙅"
-                        flagExist2=0
-                        flagDisplayErrorMessage2=0
                     else
-                        flagExist2=0
-                        flagDisplayErrorMessage2=1
+                        break
                     fi
                 done
                 ;;
@@ -572,30 +662,37 @@ deleteTable() {
                         --text="Do you need to delete a column?")
 
                     if [[ $? != 0 ]]; then
+                        zenity --width=300 --height=150 --error --title="Error" --text="YOU did not select option.🕵"
                         break
                     fi
+                    if [ -n "$conditions" ]; then
+                        PK3=($(awk -F: '{print ($3 == "" ? "x" : $3)}' "Database/$DBNameD/${TableNameD}_metaData"))
+                        FieldNumT=$(return_num_of_Field "$reply" "$DBNameD" "$TableNameD")
+                        allowDeleteOrNOt3=${PK3[$((FieldNumT - 1))]}
 
-                    PK3=($(awk -F: '{print ($3 == "" ? "x" : $3)}' "Database/$DBNameD/${TableNameD}_metaData"))
-                    FieldNumT=$(return_num_of_Field "$reply" "$DBNameD" "$TableNameD")
-                    allowDeleteOrNOt3=${PK3[$((FieldNumT - 1))]}
+                        flagExist3=0
+                        flagDisplayErrorMessage3=0
 
-                    flagExist3=0
-                    flagDisplayErrorMessage3=0
-
-                    if [[ "$allowDeleteOrNOt3" == "pk" ]]; then
-                        zenity --width=300 --height=150 --error --text="Can't remove this column as it is a Primary Key.❌"
+                        if [[ "$allowDeleteOrNOt3" == "pk" ]]; then
+                             zenity --width=300 --height=150 --error --text="Can't remove this column as it is a Primary Key.❌"
+                         else
+                            delete_multiple_Column "$reply" "$DBNameD" "$TableNameD"
+                        fi
                     else
-                        delete_multiple_Column "$reply" "$DBNameD" "$TableNameD"
+                         zenity --width=300 --height=150 --error --title="Error" --text="YOU did not select column.🕵"
                     fi
+                    
                 done
                 ;;
                 
             "Exit")
+                menu2
                 break
                 ;;
 
             *)
-                zenity --width=300 --height=150 --error --text="$choice is not one of the choices.❌"
+                #zenity --width=300 --height=150 --error --text="$choice is not one of the choices.❌"
+                menu2
                 ;;
         esac
     done
@@ -672,14 +769,14 @@ menu2(){
                     disconnecttable=true
                     zenity --width=300 --height=150 --info --title="Disconnecting" --text="Disconnecting from $tablename..."
                     if [ $? -eq 0 ]; then
-                        select_table $DBName
+                       menu # select_table $DBName
                     fi
                     ;;
                 *)
                     #zenity --width=300 --height=150 --error --title="Invalid Choice" --text="$REPLY is not one of the choices."
             esac
             else
-                select_table $DBName
+                break #select_table $DBName
             fi
             if [[ $disconnecttable == "true" ]]; then
                 break
