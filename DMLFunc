@@ -348,6 +348,7 @@ while true; do
                 done
 
                 # Read the data from the file and construct the data string
+                column_data=""
                 while IFS="$delimiter" read -ra columns; do
                     for col in "${columns[@]}"; do
                         column_data+=" $col"
@@ -442,29 +443,53 @@ while true; do
                 fi
                 ;;
             "Select data matching condition(s)")
-                selectinput=$(zenity --width=300 --height=300 --entry --title="Enter Conditions" --text="Enter the conditions separated by comma (,)")
-                
-                echo $selectinput
-                selectinput=$(echo -e "${selectinput}" | tr -d '[:space:]')
+                delimiter=":"
+                column_names=$(cut -d"$delimiter" -f1 "$metadatafile" | tr '\n' ' ')
 
+                # Generate --column options dynamically using the column names
+                column_options=""
+                for col_name in $column_names; do
+                    column_options+=" --column=$col_name"
+                done
+                selectinput=$(zenity --width=300 --height=300 --entry --title="Enter Conditions" --text="Enter the conditions separated by comma (,)")
+                echo "Conditions entered: $selectinput"
+                selectinput=$(echo -e "${selectinput}" | tr -d '[:space:]')
+                
                 IFS=","
                 declare -a conditions=($selectinput)
                 IFS=$OIFS
-                echo $conditions
+
                 valid_select_statements "${conditions[@]}"
                 validselect=$?
 
                 if [[ $validselect == "1" ]]; then
-                  validrows=$(get_matching_rows "${conditions[@]}")
-                   zenity --width=300 --height=300 --info --title="Selected Data Matching Conditions" --text="$(awk -F: -v validrowsraw="$validrows" 'BEGIN{split(validrowsraw,validrows," ");ctr=1;}\
-                   {\
-                  if (NR == validrows[ctr]){\
-                   for (i=1;i<=NF;i++) {\
-                         printf $i" "
-                         }\
-                         print ""
-                            }\
-                                 }' $tablefile)"
+                    validrows=$(get_matching_rows "${conditions[@]}")
+                    validrowsdata="$(awk -F: -v validrowsraw="$validrows" 'BEGIN{split(validrowsraw,validrows," ");ctr=1;}\
+                        {\
+                        if (NR == validrows[ctr]){\
+                        for (i=1;i<=NF;i++) {\
+                                printf $i" "
+                                }\
+                                print "" 
+                                ctr++  }\
+                                        }' $tablefile)" 
+                    
+                    # Construct the data string for zenity --list
+                    readarray -t rows <<< "$validrowsdata"
+                    data_list=""
+                    delimiter=":"
+                    for row in "${rows[@]}"; do
+                        echo $row
+                        columns=($(echo $row | tr $delimiter " "))
+                        row_data=""
+                        for col in "${columns[@]}"; do
+                            row_data+="$col "
+                        done
+                        data_list+="$row_data"
+                    done
+
+                    # Display the formatted rows using zenity --list
+                    zenity --width=600 --height=600 --list --text="Selected Data Matching Conditions" $column_options $data_list
                 else
                     zenity --width=300 --height=150 --error --text="Invalid select statements.❌"
                 fi
