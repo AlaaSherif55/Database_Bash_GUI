@@ -89,6 +89,36 @@ valid_statements() {
 	done
 	return "1"
 }
+valid_select_statements() {
+	declare -a allstatements=($@)
+	DatatypesRaw=$(awk -F: '{print $2}' $metadatafile)
+	declare -a Datatypes=($DatatypesRaw)
+	for statement in ${allstatements[@]}
+	do
+		IFS="="
+		declare -a states=($statement)
+		IFS=$OIFS
+		columnname=${states[0]}
+		value=${states[1]}
+		if [[ $value == "" ]];then
+			return "0"
+		fi
+		check_column_exist $columnname
+		colexists=$?
+		
+		colnumarr=$(get_col_numbers $columnname)
+		declare -i colnum=${colnumarr[0]}
+		if [[ ${Datatypes[$colnum]} == "int" ]];then
+			if [[ $(check_is_int $value) == "1" ]];then
+				return "0"
+			fi
+		fi
+		if [[ $colexists != "1" ]];then
+			return "0"
+		fi
+	done
+	return "1"
+}
 get_cond_number() {
 	IFS="="
 	declare -a states=($1)
@@ -374,6 +404,7 @@ while true; do
                 done
 
                 if [[ $validcols == "1" ]]; then
+
                     delimiter=":"
 
                     # Generate --column options dynamically using the column names
@@ -389,20 +420,20 @@ while true; do
 
                     # Use awk to extract and format the selected columns
                     formatted_cols=$(awk -F"$delimiter" -v plainnums="${colnums[*]}" '
-                        BEGIN {
-                            split(plainnums, numMap, "\n");
+                        BEGIN{split(plainnums, numMap, "\n");}\
+                        {\
+                        for (i=1;i<=length(numMap);i++) {
+                          asscValues[i] = $(numMap[i]+1);
                         }
-                        {
-                            ptr = 1;
-                            printf NR "-";
-                            for (i = 1; i <= NF; i++) {
-                                if (i == (numMap[ptr] + 1)) {
-                                    printf " " $i;
-                                    ptr++;
-                                }
-                            };
-                            print "";
-                        }' "$tablefile")
+
+                        ptr=1; \
+                        for (i=1;i<=length(asscValues);i++) {
+                          if (asscValues[i] != "") {
+                            printf asscValues[i]" ";
+                          }
+
+                        }
+                         print "";}' $tablefile)
 
                     # Display the formatted columns using zenity
                     zenity --width=300 --height=300 --info --title="Selected Columns from Table" --text="$formatted_cols" $column_options
@@ -420,7 +451,7 @@ while true; do
                 declare -a conditions=($selectinput)
                 IFS=$OIFS
                 echo $conditions
-                valid_statements "${conditions[@]}"
+                valid_select_statements "${conditions[@]}"
                 validselect=$?
 
                 if [[ $validselect == "1" ]]; then
@@ -428,12 +459,10 @@ while true; do
                    zenity --width=300 --height=300 --info --title="Selected Data Matching Conditions" --text="$(awk -F: -v validrowsraw="$validrows" 'BEGIN{split(validrowsraw,validrows," ");ctr=1;}\
                    {\
                   if (NR == validrows[ctr]){\
-                    printf ctr"- ";\
                    for (i=1;i<=NF;i++) {\
                          printf $i" "
                          }\
                          print ""
-                         ctr++;\
                             }\
                                  }' $tablefile)"
                 else
