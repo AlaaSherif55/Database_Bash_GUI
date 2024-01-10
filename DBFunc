@@ -1,0 +1,184 @@
+#!/bin/bash
+shopt -s extglob
+LC_COLLATE=C
+
+source TableFunc
+
+createDB() {
+    modifiedDBName="1"
+    while [[ $modifiedDBName == "1" ]]; do
+        inputname=$(zenity --width=600 --height=600 --entry --title="Create Database" --text="Enter the database name:")
+        if [ $? -eq 0 ]; then
+            modifiedDBName=$(check_name "$inputname")
+            if [[ $modifiedDBName == "1" ]]; then
+                zenity --width=300 --height=150 --error --text="Invalid Database Name.❌"
+            fi
+        else
+            source DBMS
+        fi
+       
+    done
+
+    if [[ ! -e Database/$modifiedDBName ]]; then
+        mkdir Database/$modifiedDBName
+        zenity --width=300 --height=300 --info --text="$modifiedDBName Database was created successfully.🌟"
+    else
+        zenity --width=300 --height=300 --info --text="Database already exists!💁🏽"
+    fi
+}
+
+listDB() {
+    files=$(ls Database)
+    list_text=""
+    for file in $files; do
+        if [[ -d Database/$file ]]; then
+            list_text="$list_text\n$file"
+        fi
+    done
+
+    zenity --width=300 --height=300 --info --title="List Databases" --text="Databases:\n$list_text"
+}
+
+connectDB() {
+    databases=($(ls Database))
+    options=()
+    for ((l = 0; l < ${#databases[@]}; l++)); do
+         options+=("${databases[$l]}")
+    done
+
+    connectinput=$(zenity --width=300 --height=300 --list --title="All Databases" --column="Columns" "${options[@]}" \
+    --text="Choose DB to connect?")
+
+if [ $? -eq 0 ]; then
+    if [ -n "$connectinput" ]; then
+        #connectinput=$(zenity --width=600 --height=600 --entry --title="Connect to Database" --text="Enter the database:")
+        if [[ -e Database/$connectinput ]]; then
+            zenity --width=300 --height=300 --info --text="Connected to $connectinput.🛢"
+            while true; do
+                disconnectdb=false
+                choice=$(zenity --width=600 --height=600 --list --title="Database Menu" --column="Options" "Create Table" "List Tables" "Drop Table" "Select Table" "Disconnect DB")
+                case $choice in
+                    "Create Table")
+                        create_table "$connectinput"
+                        break
+                        ;;
+                    "List Tables")
+                        list_tables $connectinput
+                        break
+                        ;;
+                    "Drop Table")
+                        drop_table $connectinput
+                        break
+                        ;;
+                    "Select Table")
+                        select_table $connectinput
+                        break
+                        ;;
+                    "Disconnect DB")
+                        disconnectdb=true
+                        zenity --width=300 --height=300 --info --text="Disconnecting from $connectinput...🛢"
+                        if [ $? -ne 0 ]; then
+                            source DBMS
+                        fi
+                        break
+                        ;;
+                    *)
+                        #zenity  --width=300 --height=150 --error --text="$REPLY is not one of the choices."
+                        
+                        #source DBMS
+                        break
+                        ;;
+                esac
+                if [[ $disconnectdb == "true" ]]; then
+                    break
+                fi
+            done
+   
+        else
+            zenity --width=300 --height=150 --error --text="The selected DB doesn't exist.🤷‍♂️"
+        fi
+    else
+         zenity --width=300 --height=150 --error --title="Error" --text="Please select option.👨🏻‍💻"
+    fi
+else
+ source DBMS
+fi
+
+}
+menu(){
+      while true; do
+            disconnectdb=false
+            choice=$(zenity --width=600 --height=600 --list --title="Database Menu" --column="Options" "Create Table" "List Tables" "Drop Table" "Select Table" "Disconnect DB")
+
+                case $choice in
+                    "Create Table")
+                        create_table "$connectinput"
+                        break
+                        ;;
+                    "List Tables")
+                        list_tables $connectinput
+                        break
+                        ;;
+                    "Drop Table")
+                        drop_table $connectinput
+                        break
+                        ;;
+                    "Select Table")
+                        select_table $connectinput
+                        break
+                        ;;
+                    "Disconnect DB")
+                        disconnectdb=true
+                        zenity --width=300 --height=300 --info --text="Disconnecting from $connectinput...🛢"
+                        break
+                        ;;
+                    *)
+                        #zenity  --width=300 --height=150 --error --text="$REPLY is not one of the choices."
+                        zenity --width=300 --height=150 --error --title="Error" --text="Please select option.👨🏻‍💻"
+                        #source DBMS
+                        break
+                        ;;
+                esac
+                if [[ $disconnectdb == "true" ]]; then
+                    break
+                fi
+           
+        done
+}
+dropDB() {
+    databases=($(ls Database))
+    optionsDropDatabase=()
+    for ((l = 0; l < ${#databases[@]}; l++)); do
+         optionsDropDatabase+=("${databases[$l]}")
+    done
+
+    droppedname=$(zenity --width=300 --height=300 --list --title="Delete Multiple Columns" --column="Columns" "${optionsDropDatabase[@]}" \
+    --text="Choose DB to connect?")
+    #droppedname=$(zenity --width=300 --height=300 --entry --title="Drop Database" --text="Enter the name of the database you wish to drop")
+ if [ $? -eq 0 ]; then
+    if [[ -e Database/$droppedname ]]; then
+        affirmativepick=false
+        dropthedb=false
+        while [[ $affirmativepick == "false" ]]; do
+            zenity --width=300 --height=300 --question --title="Confirmation" --text="Are you sure? (Y/N)"
+            case $? in
+                0)
+                    affirmativepick=true
+                    dropthedb=true
+                    ;;
+                1)
+                    affirmativepick=true
+                    ;;
+            esac
+        done
+        if [[ $dropthedb == "true" ]]; then
+            rm -rf Database/$droppedname
+            zenity --width=300 --height=300 --info --text="Database $droppedname was dropped with all its content.✅"
+        fi
+    else
+        zenity --width=300 --height=150 --error --text="The selected database doesn't exist.🤷‍♂️"
+    fi
+else
+    source DBMS
+fi 
+}

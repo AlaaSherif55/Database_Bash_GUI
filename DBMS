@@ -1,0 +1,46 @@
+#! /bin/bash
+
+shopt -s extglob
+LC_COLLATE=C
+
+source DBFunc
+
+if [[ ! -e "Database" ]];then
+	mkdir Database
+fi
+
+#zenity --width=300 --height=300 --info --title="This database made by 🌐" --text="💡Alaa sherif fathi / Seif sallam"
+while true; do
+    option=$(zenity --width=600 --height=600 --list --title="Database Menu" --column="Options" \
+                    "Create Database" \
+                    "List Database" \
+                    "Connect to Database" \
+                    "Drop Database" \
+                    "Exit")
+ if [ $? -eq 0 ]; then
+    case $option in
+        "Create Database")
+            createDB
+            ;;
+        "List Database")
+            listDB
+            ;;
+        "Connect to Database")
+            connectDB
+            ;;
+        "Drop Database")
+            dropDB
+            ;;
+        "Exit")
+            zenity --width=300 --height=150 --info --title="Exiting" --text="Thanks for using our DBMS!😊"
+            exit 0
+            ;;
+        *)
+            zenity --width=300 --height=150 --error --text="Invalid option: $option ❌"
+            ;;
+    esac
+else
+    zenity --width=300 --height=150 --info --title="Exiting" --text="Thanks for using our DBMS!😊"
+    exit 0
+fi
+done

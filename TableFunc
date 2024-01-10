@@ -1,0 +1,186 @@
+#! /usr/bin/bash
+source checkName
+source DMLFunc
+
+create_table() {
+    DBName="$1"
+    oneFlag=0
+    tables=$(ls Database/$DBName | grep -v "_metaData")
+
+    while true; do
+        TableName=$(zenity --width=300 --height=300 --entry --title="Create Table" --text="Enter the name of the table:")
+    if [ $? -eq 0 ]; then
+        modifiedTableName=$(check_name "$TableName")
+
+        if [[ "$modifiedTableName" != "1" ]]; then
+            if [[ ! -e Database/$DBName/$modifiedTableName ]]; then
+                touch "Database/$DBName/$modifiedTableName"
+                touch "Database/$DBName/${modifiedTableName}_metaData"
+                break
+            else
+                zenity --width=300 --height=150 --info --title="Table Exists" --text="The table already exists."
+            fi
+        else
+            zenity --width=300 --height=150 --error --title="Invalid Name" --text="Invalid table name."
+        fi
+    else
+        menu
+    fi
+    done
+
+    while true; do
+        oo=$(zenity --width=300 --height=300 --entry --title="Create Table" --text="Enter the number of fields:")
+        test=$(check_is_int "$oo")
+
+        if [[ "$test" != "1" ]]; then
+            break
+        else
+            zenity --width=300 --height=150 --error --title="Invalid Input" --text="Invalid NumFields."
+        fi
+    done
+
+    for ((i = 1; i <= oo; i++)); do
+        while true; do
+            FieldName=$(zenity --width=300 --height=300 --entry --title="Create Table" --text="Enter the name of field $i:")
+            modifiedFieldName=$(check_name "$FieldName")
+
+            if [[ "$modifiedFieldName" != "1" ]]; then
+                printf "$modifiedFieldName:" >> "Database/$DBName/${modifiedTableName}_metaData"
+                break
+            else
+                zenity --width=300 --height=150 --error --title="Invalid Name" --text="Invalid Column Name."
+            fi
+        done
+
+        while true; do
+            DataType=$(zenity --width=300 --height=300 --entry --title="Create Table" --text="Enter the datatype of field $i (string/int):")
+            checkDataType=$(check_dataType "$DataType")
+
+            if [[ "$checkDataType" != "1" ]]; then
+                re=$(echo "$DataType" | tr '[:upper:]' '[:lower:]')
+                printf "$re:" >> "Database/$DBName/${modifiedTableName}_metaData"
+                break
+            else
+                zenity --width=300 --height=150 --error --title="Invalid Datatype" --text="Invalid Datatype."
+            fi
+        done
+
+        if [[ $oneFlag == 0 ]]; then
+            while true; do
+                IsPrimaryKey=$(zenity --width=300 --height=300 --entry --title="Create Table" --text="Is field $i a primary key? (y/n):")
+                modifiedYesNo=$(check_yesNo "$IsPrimaryKey")
+
+                if [[ "$modifiedYesNo" != "1" ]]; then
+                    if [ "$modifiedYesNo" == "y" ]; then
+                        printf "pk " >> "Database/$DBName/${modifiedTableName}_metaData"
+                        oneFlag=1
+                        break
+                    else
+                        break
+                    fi
+                else
+                    zenity --width=300 --height=150 --error --title="Invalid Response" --text="Invalid response."
+                fi
+            done
+        fi
+        printf "\n" >> "Database/$DBName/${modifiedTableName}_metaData"
+    done
+
+    zenity --width=300 --height=150 --info --title="Table Created" --text="Table $modifiedTableName created successfully in $DBName database."
+}
+
+list_tables() {
+    DBName="$1"
+    zenity --width=600 --height=600 --list --title="List Tables" --column="Tables" $(ls Database/$DBName | grep -v "_metaData")
+   if [ $? -ne 0 ]; then
+        menu
+   fi
+
+}
+
+drop_table() {
+    DBName="$1"
+    tables=$(ls Database/$DBName | grep -v "_metaData")
+    TableName=$(zenity --width=300 --height=300 --entry --title="Drop Table" --text="Enter the name of the table:")
+if [ $? -eq 0 ]; then
+    for file in $tables; do
+        if [ "$TableName" == "$file" ]; then
+            rm Database/$DBName/$TableName
+            rm "Database/$DBName/${TableName}_metaData"
+            zenity --width=300 --height=150 --info --title="Table Dropped" --text="Table $TableName dropped successfully in $DBName database."
+            break
+        else
+            zenity --width=300 --height=150 --error --title="Table Not Found" --text="Table $TableName does not exist."
+            break
+        fi
+    done
+else
+    menu
+fi 
+}
+
+select_table() {
+    DBName=$1
+    echo $DBName
+    Tables2=($(ls "Database/$DBName" | grep -v "_metaData"))
+    optionsTables=()
+    for ((l = 0; l < ${#Tables2[@]}; l++)); do
+        optionsTables+=("${Tables2[$l]}")
+    done
+   
+    tablename=$(zenity --width=300 --height=300 --list --title="Select Tables in ${DBName}" --column="Tables" "${optionsTables[@]}" \
+                        --text="Select Table in ${DBName}")
+    #tablename=$(zenity --width=300 --height=300 --entry --title="Select Table" --text="Enter table name:")
+    if [ -n "$tablename" ]; then
+        if [ $? -eq 0 ]; then
+            if [[ -e Database/$DBName/$tablename ]]; then
+                zenity --width=300 --height=150 --info --title="Connected" --text="Connected to $tablename..."
+                while true; do
+                    disconnecttable=false
+                    choice=$(zenity --width=600 --height=600 --list --title="DML OPERATIONS" --column="Operations" "Select from Table" "Insert into Table" "Update Table" "Delete from Table" "Disconnect Table")
+                    if [ $? -eq 0 ]; then
+                    case $choice in
+                        "Select from Table")
+                            select_from_table "Database/$DBName" $tablename
+                            break
+                            ;;
+                        "Insert into Table")
+                            insert_into_table $DBName $tablename
+                            break
+                            ;;
+                        "Update Table")
+                            update_table "Database/$DBName" $tablename
+                            break
+                            ;;
+                        "Delete from Table")
+                            deleteTable $DBName $tablename
+                            break
+                            ;;
+                        "Disconnect Table")
+                            disconnecttable=true
+                            zenity --width=300 --height=150 --info --title="Disconnecting" --text="Disconnecting from $tablename..."
+                            if [ $? -eq 0 ]; then
+                                menu #$DBName
+                            fi
+                            ;;
+                        *)
+                            zenity --width=300 --height=150 --error --title="Invalid Choice" --text="$REPLY is not one of the choices."
+                    esac
+                    else
+                        select_table $DBName
+                    fi
+                    if [[ $disconnecttable == "true" ]]; then
+                        break
+                    fi
+                done
+            else
+                zenity --width=300 --height=150 --error --title="Table Not Found" --text="This table does not exist."
+            fi
+        else 
+            menu
+        # select_table $DBName
+        fi
+    else
+    zenity --width=300 --height=150 --error --title="Error" --text="YOU did not select option."
+    fi
+}
